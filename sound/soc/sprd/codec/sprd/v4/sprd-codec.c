@@ -49,7 +49,7 @@
 #include "sprd-asoc-common.h"
 #include <soc/sprd/arch_misc.h>
 
-#define AUDIO_PA_SHORT_CHECK /*defined for audio PA short status check.*/
+//#define AUDIO_PA_SHORT_CHECK /*defined for audio PA short status check.*/
 #ifdef AUDIO_PA_SHORT_CHECK
 enum {
 	AUDIO_PA_SHORT_NA = 0, /* does not support PA output P/N short check */

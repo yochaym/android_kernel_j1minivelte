@@ -250,7 +250,7 @@ void gpio_timer_handler(unsigned long data)
 	else
 	{
 		sleep_para.gpio_opt_tag = 0;
-//		SDIOTRAN_ERR("gpio_opt_tag=0\n" );
+		SDIOTRAN_ERR("gpio_opt_tag=0\n" );
 	}
 }
 
@@ -330,7 +330,7 @@ int get_screen_status(void)
 	else	
 		is_screen_on = 1; 	
 
-	//SDIOTRAN_ERR("*brightness is %s, is_screen_on is %d\r",buf, is_screen_on);
+	SDIOTRAN_ERR("*brightness is %s, is_screen_on is %d\r",buf, is_screen_on);
 	kfree(buf);	
 	filp_close(file, NULL);	
 	set_fs(old_fs);	
@@ -412,7 +412,7 @@ int set_marlin_wakeup(uint32 chn,uint32 user_id)
 		gpio_direction_output(sdio_data->wake_out,1);
 		spin_unlock_irqrestore(&sleep_spinlock, flags);
 		
-//		SDIOTRAN_ERR("%d-1\n", sdio_data->wake_out );
+		SDIOTRAN_ERR("%d-1\n", sdio_data->wake_out );
 		
 		if((0x1 == user_id) ||(0x3 == user_id))
 		{
@@ -453,7 +453,7 @@ int set_marlin_sleep(uint32 chn,uint32 user_id)
 			bt_wake_flag = 0;
 		}
 		atomic_set(&gpioreq_need_pulldown, 0);//sleep_para.gpioreq_need_pulldown = 0;
-//		SDIOTRAN_ERR("gpio%d-0,user_id-%d\n", sdio_data->wake_out, user_id);
+		SDIOTRAN_ERR("gpio%d-0,user_id-%d\n", sdio_data->wake_out, user_id);
 	}
 #endif
 	return 0;
@@ -1332,7 +1332,7 @@ static irqreturn_t marlinwake_irq_handler(int irq, void * para)
 		irq_set_irq_type(irq, IRQ_TYPE_EDGE_RISING);
 
 	ack_gpio_status = gpio_wake_status;
-//	SDIOTRAN_ERR("%d-%d\n",sdio_data->wake_ack, gpio_wake_status );
+	SDIOTRAN_ERR("%d-%d\n",sdio_data->wake_ack, gpio_wake_status );
 	
 	if(gpio_wake_status)
 	{
@@ -1363,12 +1363,12 @@ static irqreturn_t marlinwake_irq_handler(int irq, void * para)
 		if( atomic_read(&gpioreq_need_pulldown) )//if(sleep_para.gpioreq_need_pulldown)
 		{	
 			sleep_para.gpio_opt_tag = 1;
-//			SDIOTRAN_ERR("gpio_opt_tag-1\n");
+			SDIOTRAN_ERR("gpio_opt_tag-1\n");
 			mod_timer(&(sleep_para.gpio_timer), jiffies + msecs_to_jiffies(sleep_para.marlin_waketime) );
 			if(sdio_w_flag == 1)
 			{
 				complete(&marlin_ack);
-//				SDIOTRAN_ERR("ack-sem\n");
+				SDIOTRAN_ERR("ack-sem\n");
 				set_marlin_sleep(0xff,0x1);
 			}
 			else

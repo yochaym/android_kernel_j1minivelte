@@ -98,6 +98,7 @@ static int of_usb_notifier_dt(struct device *dev,
 	pdata->can_disable_usb =
 		!(of_property_read_bool(np, "samsung,unsupport-disable-usb"));
 	pr_info("%s, can_disable_usb %d\n", __func__, pdata->can_disable_usb);
+	
 err:
 	pr_info("%s- ret:%d\n", __func__, ret);
 	return ret;
@@ -144,8 +145,9 @@ static int dwc3_pregpio(int gpio, int use)
 
 static int dwc3_vbus_drive(bool enable)
 {
+	struct otg_notify *o_notify = get_otg_notify();
 	struct otg_booster *o_b;
-	o_b = find_get_booster();
+	o_b = find_get_booster(o_notify);
 	if (!o_b || !o_b->booster)
 		return -EFAULT;
 	pr_info("booster-%s %s\n", o_b->name, enable ? "ON" : "OFF");
@@ -155,6 +157,10 @@ static int dwc3_vbus_drive(bool enable)
 static int dwc3_set_host(bool enable)
 {
 	pr_info("%s+ enable=%d\n", __func__, enable);
+	if(otg_f.start_host)
+		pr_info("%s start_host is ..\n", __func__);
+	if(otg_f.data)
+		pr_info("%s data is ..\n", __func__);
 	if (otg_f.start_host && otg_f.data)
 		otg_f.start_host(otg_f.data, enable);
 	else
@@ -187,11 +193,12 @@ static struct otg_notify dwc3_otg_notify = {
 #ifndef CONFIG_USB_HOST_NOTIFY
 	.unsupport_host = 1,
 #endif
+	.disable_control = 1,
 };
 int sm_booster_enable(bool enable)
 {
 	struct power_supply *psy
-		= power_supply_get_by_name("otg");
+		= power_supply_get_by_name("sec-charger");
 	union power_supply_propval value;
 	int ret = 0;
 
@@ -200,9 +207,13 @@ int sm_booster_enable(bool enable)
 		ret = -ENOENT;
 		goto err;
 	}
+	if (enable)
+		value.intval = 1;
+	else
+		value.intval = 0;
 
-	value.intval = enable;
-	psy->set_property(psy, POWER_SUPPLY_PROP_ONLINE, &value);
+	psy->set_property(psy,
+		POWER_SUPPLY_PROP_CHARGE_OTG_CONTROL, &value);
 err:
 	return ret;
 }
@@ -216,6 +227,7 @@ static struct otg_booster otg_boosters[] = {
 
 static int find_and_register_boosters(char *b_name)
 {
+	struct otg_notify *o_notify = get_otg_notify();
 	int ret = 0;
 	int i = 0;
 
@@ -232,7 +244,7 @@ static int find_and_register_boosters(char *b_name)
 		goto err;
 	}
 
-	ret = register_booster(&otg_boosters[i]);
+	ret = register_booster(o_notify, &otg_boosters[i]);
 	if (ret)
 		pr_err("%s, failed. ret=%d\n", __func__, ret);
 err:
@@ -287,6 +299,7 @@ static int usb_notifier_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to get platfom_data\n");
 		goto err;
 	}
+
 	dwc3_otg_notify.disable_control = pdata->can_disable_usb;
 	set_otg_notify(&dwc3_otg_notify);
 	set_notify_data(&dwc3_otg_notify, pdata);

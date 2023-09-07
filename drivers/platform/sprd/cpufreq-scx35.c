@@ -650,8 +650,8 @@ static void sprd_raw_set_cpufreq(int cpu, struct cpufreq_freqs *freq, int index)
 		CPUFREQ_SET_VOLTAGE();
 	}
 
-//	pr_info("%u --> %u, real=%u, index=%d\n",
-//		freq->old, freq->new, sprd_raw_get_cpufreq(), index);
+	pr_info("%u --> %u, real=%u, index=%d\n",
+		freq->old, freq->new, sprd_raw_get_cpufreq(), index);
 
 #undef CPUFREQ_SET_VOLTAGE
 #undef CPUFREQ_SET_CLOCK
@@ -672,8 +672,8 @@ static void sprd_real_set_cpufreq(struct cpufreq_policy *policy, unsigned int ne
 		mutex_unlock(&freq_lock);
 		return;
 	}
-//	pr_info("--xing-- set %u khz for cpu%u\n",
-//		new_speed, policy->cpu);
+	pr_info("--xing-- set %u khz for cpu%u\n",
+		new_speed, policy->cpu);
 	global_freqs.cpu = policy->cpu;
 	global_freqs.new = new_speed;
 
@@ -824,7 +824,7 @@ static void sprd_set_cpureq_limit(void)
 		cpufreq_min_limit = min(tmp[i].frequency, cpufreq_min_limit);
 		cpufreq_max_limit = max(tmp[i].frequency, cpufreq_max_limit);
 	}
-//	pr_info("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
+	pr_info("--xing-- %s max=%u min=%u\n", __func__, cpufreq_max_limit, cpufreq_min_limit);
 }
 
 #if defined(CONFIG_ARCH_SCX35LT8) || defined(CONFIG_ARCH_WHALE)
@@ -959,8 +959,8 @@ static int sprd_cpufreq_init(struct cpufreq_policy *policy)
 		pr_err("%s Failed to config freq table: %d\n", __func__, ret);
 
 
-//	pr_info("%s policy->cpu=%d, policy->cur=%u, ret=%d\n",
-//		__func__, policy->cpu, policy->cur, ret);
+	pr_info("%s policy->cpu=%d, policy->cur=%u, ret=%d\n",
+		__func__, policy->cpu, policy->cur, ret);
 
        cpumask_setall(policy->cpus);
 

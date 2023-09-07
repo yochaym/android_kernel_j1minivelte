@@ -20,7 +20,7 @@
 #include <linux/time.h>  //KSND
 
 //KSND
-#define SEC_USE_HS_SYSFS
+//#define SEC_USE_HS_SYSFS
 //#define SEC_SYSFS_ADC_EARJACK
 
 //====================  debug  ====================
