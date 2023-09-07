@@ -377,6 +377,7 @@ struct mmc_host {
 		int				num_funcs;
 	} embedded_sdio_data;
 #endif
+	unsigned int		card_detect_cnt;
 
 	unsigned long		private[0] ____cacheline_aligned;
 };
@@ -478,6 +479,11 @@ static inline int mmc_card_is_removable(struct mmc_host *host)
 static inline int mmc_card_keep_power(struct mmc_host *host)
 {
 	return host->pm_flags & MMC_PM_KEEP_POWER;
+}
+
+static inline int mmc_card_skip_resume_init(struct mmc_host *host)
+{
+	return host->pm_flags & MMC_PM_SKIP_RESUME_INIT;
 }
 
 static inline int mmc_card_wake_sdio_irq(struct mmc_host *host)

@@ -29,10 +29,14 @@
 #include <linux/usb/gadget.h>
 #include <asm/current.h>
 
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+#include <linux/usblog_proc_notify.h>
+#endif
+
 #include "gadget_chips.h"
 
 #include "f_fs.c"
-
+//#include "f_adb.c"
 #include "f_audio_source.c"
 #ifdef CONFIG_SND_USB_AUDIO
 #include "f_midi.c"
@@ -64,6 +68,7 @@ MODULE_VERSION("1.0");
 #define GSER_PORT_MAX_COUNT    MAX_U_SERIAL_PORTS
 
 static const char longname[] = "Gadget Android";
+
 /* Default device class, subclass, and protocol */
 #define USB_DEVICE_CLASS        0x00
 #define USB_DEVICE_SUBCLASS     0x00
@@ -78,6 +83,7 @@ static int composite_string_index;
 #define VENDOR_ID		0x18D1
 #define PRODUCT_ID		0x0001
 
+/* DM_PORT NUM : /dev/ttyGS* port number */
 #define DM_PORT_NUM            1
 
 #ifdef CONFIG_SND_USB_AUDIO
@@ -149,7 +155,6 @@ static void android_unbind_config(struct usb_configuration *c);
 static char manufacturer_string[256];
 static char product_string[256];
 static char serial_string[256];
-
 #ifdef CONFIG_USB_G_ANDROID_SAMSUNG_COMPOSITE
 int g_rndis;
 int is_rndis_use(void)
@@ -207,15 +212,13 @@ static void android_work(struct work_struct *data)
 	char *configured[2]   = { "USB_STATE=CONFIGURED", NULL };
 	char **uevent_envp = NULL;
 	unsigned long flags;
-	
-	printk(KERN_DEBUG "usb: %s config=%pK,connected=%d,sw_connected=%d\n",
-			__func__, cdev->config, dev->connected,
-			dev->sw_connected);
 
 	if (!cdev)
 		return;
 
-
+	printk(KERN_DEBUG "usb: %s config=%p,connected=%d,sw_connected=%d\n",
+			__func__, cdev->config, dev->connected,
+			dev->sw_connected);
 
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (cdev->config)
@@ -227,10 +230,13 @@ static void android_work(struct work_struct *data)
 
 	if (uevent_envp) {
 		kobject_uevent_env(&dev->dev->kobj, KOBJ_CHANGE, uevent_envp);
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+		store_usblog_notify(NOTIFY_USBSTATE, (void *)uevent_envp[0], NULL);
+#endif
 		printk(KERN_DEBUG "usb: %s sent uevent %s\n",
 			 __func__, uevent_envp[0]);
 	} else {
-		printk(KERN_DEBUG "usb: %s did not send uevent (%d %d %pK)\n",
+		printk(KERN_DEBUG "usb: %s did not send uevent (%d %d %p)\n",
 		 __func__, dev->connected, dev->sw_connected, cdev->config);
 	}
 }
@@ -549,7 +555,6 @@ static struct android_usb_function acm_function = {
 	.init		= acm_function_init,
 	.cleanup	= acm_function_cleanup,
 	.bind_config	= acm_function_bind_config,
-
 	.attributes	= acm_function_attributes,
 };
 
@@ -599,12 +604,6 @@ static int mtp_function_ctrlrequest(struct android_usb_function *f,
 {
 	return mtp_ctrlrequest(cdev, c);
 }
-static int ptp_function_ctrlrequest(struct android_usb_function *f,
-					struct usb_composite_dev *cdev,
-					const struct usb_ctrlrequest *c)
-{
-	return mtp_ctrlrequest(cdev, c);
-}
 
 static struct android_usb_function mtp_function = {
 	.name		= "mtp",
@@ -620,7 +619,7 @@ static struct android_usb_function ptp_function = {
 	.init		= ptp_function_init,
 	.cleanup	= ptp_function_cleanup,
 	.bind_config	= ptp_function_bind_config,
-	.ctrlrequest	= ptp_function_ctrlrequest,
+	.ctrlrequest	= mtp_function_ctrlrequest,
 };
 
 
@@ -1105,7 +1104,7 @@ err_usb_add_function:
 }
 /**
  *should notice that when adb disable/enable, it will call usb_remove_config/usb_add_config
- *and in usb_remove_config it will call unbind_config , it will also delete function list and unbind
+ *and in usb_remove_config it will call unbind_config , it will also delete function list and unbind  
  *the gser function;
  *in kernel 3.4 no acm_function_unbind_config, so now we don't use gser_function_unbind_config
  *to avoid kernel data abort. because in current s/w architecture it will delete function list two times.
@@ -1309,8 +1308,8 @@ static struct android_usb_function *supported_functions[] = {
 #if 0//def CONFIG_USB_SPRD_DWC
 	&vser_function,
 	&gser_function,
-
 #endif
+
 	NULL
 };
 
@@ -1484,6 +1483,9 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	strlcpy(buf, buff, sizeof(buf));
 	b = strim(buf);
 
+#ifdef CONFIG_USB_NOTIFY_PROC_LOG
+	store_usblog_notify(NOTIFY_USBMODE, (void *)b, NULL);
+#endif
 	while (b) {
 		name = strsep(&b, ",");
 		if (!name)
@@ -1777,6 +1779,12 @@ static int android_bind(struct usb_composite_dev *cdev)
 	/* Default strings - should be updated by userspace */
 	strncpy(manufacturer_string, "Android", sizeof(manufacturer_string)-1);
 	strncpy(product_string, "Android", sizeof(product_string) - 1);
+	/* Get and set ADB ID */
+#ifdef CONFIG_USB_G_ANDROID_SAMSUNG_COMPOSITE
+	sprintf(serial_string, "%08X%08X", system_serial_high, system_serial_low);
+#else
+	strncpy(serial_string, "0123456789ABCDEF", sizeof(serial_string)-1);
+#endif
 
 	id = usb_string_id(cdev);
 	if (id < 0)
@@ -1806,6 +1814,13 @@ static int android_usb_unbind(struct usb_composite_dev *cdev)
 	return 0;
 }
 
+static void android_gadget_complete(struct usb_ep *ep, struct usb_request *req)
+{
+	if (req->status || req->actual != req->length)
+		printk(KERN_DEBUG "usb: %s: %d, %d/%d\n", __func__,
+				req->status, req->actual, req->length);
+}
+
 /* HACK: android needs to override setup for accessory to work */
 static int (*composite_setup_func)(struct usb_gadget *gadget, const struct usb_ctrlrequest *c);
 
@@ -1822,6 +1837,7 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	req->zero = 0;
 	req->length = 0;
 	gadget->ep0->driver_data = cdev;
+	req->complete = android_gadget_complete;
 
 	list_for_each_entry(f, &dev->enabled_functions, enabled_list) {
 		if (f->ctrlrequest) {
@@ -1869,7 +1885,31 @@ static void android_disconnect(struct usb_composite_dev *cdev)
 	acc_disconnect();
 
 	dev->connected = 0;
+#ifdef CONFIG_USB_G_ANDROID_SAMSUNG_COMPOSITE
+	printk(KERN_DEBUG "usb: %s con(%d), sw(%d)\n",
+		 __func__, dev->connected, dev->sw_connected);
+	/* avoid sending a disconnect switch event
+	 * until after we disconnect.
+	 */
+	if (cdev->mute_switch) {
+		dev->sw_connected = dev->connected;
+		printk(KERN_DEBUG"usb: %s mute_switch con(%d) sw(%d)\n",
+			 __func__, dev->connected, dev->sw_connected);
+	} else {
+		//set_ncm_ready(false);
+		if (cdev->force_disconnect) {
+			dev->sw_connected = 1;
+			printk(KERN_DEBUG"usb: %s force_disconnect\n",
+				 __func__);
+			cdev->force_disconnect = 0;
+		}
+		printk(KERN_DEBUG"usb: %s schedule_work con(%d) sw(%d)\n",
+			 __func__, dev->connected, dev->sw_connected);
+		schedule_work(&dev->work);
+	}
+#else
 	schedule_work(&dev->work);
+#endif
 }
 
 static struct usb_composite_driver android_usb_driver = {

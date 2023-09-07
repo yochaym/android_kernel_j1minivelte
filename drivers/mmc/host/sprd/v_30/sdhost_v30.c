@@ -33,6 +33,29 @@
 #include "sdhost_v30.h"
 #include "sdhost_debugfs.h"
 
+#ifdef CONFIG_MACH_SP9830I
+
+#include <soc/sprd/arch_lock.h>
+
+#define  BIT_5 							(0x00000020)
+#define  REG_PIN_CTRL4                  (0x0010)
+
+extern int pinmap_set(u32 offset, u32 value);
+extern u32 pinmap_get(u32 offset);
+
+static void mmc_set_ms(int power)
+{
+	int value = 0;
+	value = pinmap_get(REG_PIN_CTRL4);
+	if (power)
+		value |= BIT_5;
+	else
+		value &= ~BIT_5;
+	pinmap_set(REG_PIN_CTRL4, value);
+}
+
+#endif
+
 #ifdef CONFIG_ARCH_SCX20
 
 #include <soc/sprd/arch_lock.h>
@@ -247,7 +270,9 @@ STATIC_FUNC int _pm_suspend(struct device *dev)
 	       host->ios.signal_voltage,
 	       host->ios.drv_type);
 */
-	return __local_pm_suspend(host);
+	err = __local_pm_suspend(host);
+	msleep(30);
+	return err;
 }
 
 STATIC_FUNC int _pm_resume(struct device *dev)
@@ -806,6 +831,14 @@ STATIC_FUNC void sdhost_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 					mmc_pin_ctl_set(0);
                                 }
 #endif
+#ifdef CONFIG_MACH_SP9830I
+				if (soc_is_scx9832a_v0()) {
+					if (!strcmp(host->deviceName, "sdio_sd")) {
+						mmc_set_ms(0);
+					}
+				}
+#endif
+
 				spin_unlock_irqrestore(&host->lock, flags);
 
 				_signalVoltageOnOff(host, 0);
@@ -832,6 +865,13 @@ STATIC_FUNC void sdhost_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 					mmc_pin_ctl_set(1);
 					mmc_pin_set(1);
                                 }
+#endif
+#ifdef CONFIG_MACH_SP9830I
+				if (soc_is_scx9832a_v0()) {
+					if (!strcmp(host->deviceName, "sdio_sd")) {
+						mmc_set_ms(1);
+					}
+				}
 #endif
 				host->ios.power_mode = ios->power_mode;
 				host->ios.vdd = ios->vdd;
@@ -1060,6 +1100,20 @@ STATIC_FUNC int _getBasicResource(struct platform_device *pdev, struct sdhost_ho
 	}
 #endif
 
+	/* added more capabilities only for Samsung */
+	if (!strcmp(host->deviceName, "sdio_emmc")) {
+		host->caps2 |= MMC_CAP2_POWEROFF_NOTIFY;
+		host->caps2 |= MMC_CAP2_NO_SLEEP_CMD;
+		host->pm_caps |= MMC_PM_SKIP_RESUME_INIT;
+	}
+
+	if (!strcmp(host->deviceName, "sdio_sd")) {
+		host->caps2 |= MMC_CAP2_DETECT_ON_ERR;
+		host->caps &= ~(MMC_CAP_UHS_SDR12 | MMC_CAP_UHS_SDR25 |
+			MMC_CAP_UHS_SDR50 | MMC_CAP_UHS_DDR50 | MMC_CAP_UHS_SDR104);
+		host->pm_caps &= ~MMC_PM_IGNORE_PM_NOTIFY;
+	}
+
 	return 0;
 }
 
@@ -1100,9 +1154,6 @@ STATIC_FUNC int _getExtResource(struct sdhost_host *host)
 
 STATIC_FUNC int _setMmcStruct(struct sdhost_host *host, struct mmc_host *mmc)
 {
-	/* Add pm notify feature to sdio module*/
-	host->caps2 |= MMC_CAP2_POWEROFF_NOTIFY;
-
 	mmc_dev(host->mmc)->dma_mask = &host->dma_mask;
 	mmc->ops = &sdhost_ops;
 	mmc->f_max = host->base_clk;
@@ -1171,7 +1222,17 @@ static ssize_t sd_card_detection_show(struct device *dev,
 #endif
 }
 
+static ssize_t sd_detect_cnt_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhost_host *host = dev_get_drvdata(dev);
+
+	dev_info(dev, "%s : The count of detect is %u\n", __func__, host->mmc->card_detect_cnt);
+	return sprintf(buf, "%u", host->mmc->card_detect_cnt);
+}
+
 static DEVICE_ATTR(status, S_IRUGO, sd_card_detection_show, NULL);
+static DEVICE_ATTR(cd_cnt, S_IRUGO, sd_detect_cnt_show, NULL);
 
 STATIC_FUNC int sdhost_probe(struct platform_device *pdev)
 {
@@ -1206,6 +1267,9 @@ STATIC_FUNC int sdhost_probe(struct platform_device *pdev)
 			pr_err("Fail to create sysfs dev\n");
 		if (device_create_file(sd_card_detection_dev, 
 					&dev_attr_status) < 0)
+			pr_err("Fail to create sysfs file\n");
+		if (device_create_file(sd_card_detection_dev, 
+					&dev_attr_cd_cnt) < 0)
 			pr_err("Fail to create sysfs file\n");
 		dev_set_drvdata(sd_card_detection_dev, host);
 	}
